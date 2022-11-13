@@ -1,4 +1,4 @@
-use std::{env::current_dir, error::Error, ffi::OsString, fs, path::PathBuf};
+use std::{env::current_dir, error::Error, fs, path::PathBuf};
 
 fn execute_in_directory(
     directory: &str,
@@ -37,13 +37,8 @@ fn set_extension_to_jpg(path: &PathBuf) -> Option<String> {
     };
 }
 
-fn main() {
-    let current_directory = current_dir();
-
-    let directory: OsString = match current_directory {
-        Ok(path_buf) => path_buf.into_os_string(),
-        Err(error) => panic!("{:?}", error),
-    };
+fn main() -> Result<(), Box<dyn Error>> {
+    let directory = current_dir()?;
 
     let command: String = if let Some(value) = std::env::args().nth(1) {
         String::from(value)
@@ -59,20 +54,17 @@ fn main() {
             );
 
             if let Some(dir) = directory.to_str() {
-                match execute_in_directory(dir, is_jfif, set_extension_to_jpg) {
-                    Ok(result) => {
-                        for r in result {
-                            if let Some(value) = r {
-                                println!("File {} renamed", value);
-                            }
-                        }
-                    }
-                    Err(..) => println!("Failed to change jfif extension on images"),
-                }
+                 let modified = execute_in_directory(dir, is_jfif, set_extension_to_jpg)?;
+                 for m in modified {
+                     if let Some(result) = m {
+                         println!("File {} changed successfully", result);
+                     }
+                 }
             }
         }
         _ => {
-            println!("No valid command specified")
+            println!("No valid command specified");
         }
     }
+    return Ok(());
 }
