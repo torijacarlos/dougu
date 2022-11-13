@@ -1,41 +1,35 @@
-use std::{env::current_dir, error::Error, ffi::OsString, fs};
+use std::{env::current_dir, error::Error, ffi::OsString, fs, path::PathBuf};
 
-fn format_jfif_to_jpeg(directory: &str) -> Result<Vec<Result<(), std::io::Error>>, Box<dyn Error>> {
+fn execute_in_directory(
+    directory: &str,
+    f: fn(&std::path::PathBuf) -> Option<String>,
+) -> Result<Vec<Option<String>>, Box<dyn Error>> {
+    let modified: Vec<Option<String>> = fs::read_dir(directory)?
+        .map(|file| match file {
+            Ok(value) => f(&value.path()),
+            Err(..) => None,
+        })
+        .collect();
+
+    return Ok(modified);
+}
+
+fn format_jfif_to_jpeg(path: &PathBuf) -> Option<String> {
     // Changes jfif files to jpg
+    if let Some(file) = path.extension() {
+        if let Some(value) = file.to_str() {
+            if value == "jfif" {
+                let mut new_path = path.to_owned();
+                new_path.set_extension("jpg");
 
-    let mut paths = fs::read_dir(directory)?;
-    let mut modified: Vec<Result<(), std::io::Error>> = Vec::new();
-
-    loop {
-        let file = paths.next();
-
-        // TODO(torijacarlos): How can I better chain options?
-
-        if let Some(value) = file {
-            let path = value?.path();
-
-            if let Some(file) = path.extension() {
-                if let Some(value) = file.to_str() {
-                    
-                    if value == "jfif" {
-                        let mut new_path = path.to_owned();
-                        new_path.set_extension("jpg");
-
-                        println!(
-                            "File {} changed to {}",
-                            path.to_str().unwrap(),
-                            new_path.to_str().unwrap()
-                        );
-                        modified.push(fs::rename(path, new_path));
-                    }
-                }
+                return match fs::rename(path, new_path) {
+                    Ok(..) => Some(String::from(path.to_str().unwrap().to_owned())),
+                    Err(..) => None,
+                };
             }
-        } else {
-            break;
         }
     }
-
-    Ok(modified)
+    return None;
 }
 
 fn main() {
@@ -59,8 +53,15 @@ fn main() {
                 directory.to_str().unwrap()
             );
 
-            match format_jfif_to_jpeg(directory.to_str().unwrap()) {
-                Ok(..) => println!("Success changing jfif files to jpg"),
+            let sth = execute_in_directory(directory.to_str().unwrap(), format_jfif_to_jpeg);
+            match sth {
+                Ok(result) => {
+                    for r in result {
+                        if let Some(value) = r {
+                            println!("File {} renamed", value);
+                        }
+                    }
+                }
                 Err(..) => println!("Failed to change jfif extension on images"),
             }
         }
