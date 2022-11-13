@@ -2,9 +2,14 @@ use std::{env::current_dir, error::Error, ffi::OsString, fs, path::PathBuf};
 
 fn execute_in_directory(
     directory: &str,
-    f: fn(&std::path::PathBuf) -> Option<String>,
+    filter: fn(&PathBuf) -> bool,
+    f: fn(&PathBuf) -> Option<String>,
 ) -> Result<Vec<Option<String>>, Box<dyn Error>> {
     let modified: Vec<Option<String>> = fs::read_dir(directory)?
+        .filter(|file| match file {
+            Ok(value) => filter(&value.path()),
+            Err(..) => false,
+        })
         .map(|file| match file {
             Ok(value) => f(&value.path()),
             Err(..) => None,
@@ -14,22 +19,22 @@ fn execute_in_directory(
     return Ok(modified);
 }
 
-fn format_jfif_to_jpeg(path: &PathBuf) -> Option<String> {
-    // Changes jfif files to jpg
+fn is_jfif(path: &PathBuf) -> bool {
     if let Some(file) = path.extension() {
         if let Some(value) = file.to_str() {
-            if value == "jfif" {
-                let mut new_path = path.to_owned();
-                new_path.set_extension("jpg");
-
-                return match fs::rename(path, new_path) {
-                    Ok(..) => Some(String::from(path.to_str().unwrap().to_owned())),
-                    Err(..) => None,
-                };
-            }
+            return value == "jfif";
         }
     }
-    return None;
+    return false;
+}
+
+fn set_extension_to_jpg(path: &PathBuf) -> Option<String> {
+    let mut new_path = path.to_owned();
+    new_path.set_extension("jpg");
+    return match fs::rename(path, new_path) {
+        Ok(..) => Some(String::from(path.to_str().unwrap().to_owned())),
+        Err(..) => None,
+    };
 }
 
 fn main() {
@@ -53,16 +58,17 @@ fn main() {
                 directory.to_str().unwrap()
             );
 
-            let sth = execute_in_directory(directory.to_str().unwrap(), format_jfif_to_jpeg);
-            match sth {
-                Ok(result) => {
-                    for r in result {
-                        if let Some(value) = r {
-                            println!("File {} renamed", value);
+            if let Some(dir) = directory.to_str() {
+                match execute_in_directory(dir, is_jfif, set_extension_to_jpg) {
+                    Ok(result) => {
+                        for r in result {
+                            if let Some(value) = r {
+                                println!("File {} renamed", value);
+                            }
                         }
                     }
+                    Err(..) => println!("Failed to change jfif extension on images"),
                 }
-                Err(..) => println!("Failed to change jfif extension on images"),
             }
         }
         _ => {
